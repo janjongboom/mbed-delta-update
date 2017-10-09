@@ -1,3 +1,20 @@
+/*
+* PackageLicenseDeclared: Apache-2.0
+* Copyright (c) 2017 ARM Limited
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
 /**
  * Some functions that are handy when implementing delta updates
  */
@@ -13,6 +30,15 @@ enum MBED_DELTA_UPDATE {
     MBED_DELTA_UPDATE_NO_MEMORY = -8401
 };
 
+/**
+ * Copy the content of the current running application to a block device
+ * @param flash_page_size Size of a flash page, will also be allocated as a buffer
+ * @param flash_address Start of the application
+ * @param flash_size Size of the application
+ * @param bd Instance of block device
+ * @param bd_address Offset for block device to store the application in
+ * @returns 0 if OK, negative value if not OK
+ */
 int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_address, size_t flash_size, BlockDevice *bd, size_t bd_address) {
     char *page_buffer = (char*)malloc(flash_page_size);
     if (!page_buffer) {
@@ -55,6 +81,14 @@ int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_addre
     return MBED_DELTA_UPDATE_OK;
 }
 
+/**
+ * Print large block of data on a block device
+ * @param bd Instance of block device
+ * @param address Start address
+ * @param length Amount of bytes to print
+ * @param buffer_size Buffer size to allocate
+ * @returns 0 if OK, negative value if not OK
+ */
 int print_blockdevice_content(BlockDevice *bd, size_t address, size_t length, size_t buffer_size) {
     uint8_t *buffer = (uint8_t*)malloc(buffer_size);
     if (!buffer) {
@@ -83,6 +117,59 @@ int print_blockdevice_content(BlockDevice *bd, size_t address, size_t length, si
     free(buffer);
 
     return MBED_DELTA_UPDATE_OK;
+}
+
+void patch_progress(uint8_t pct) {
+    debug("Patch progress: %d%%\n", pct);
+}
+
+/**
+ * Apply the delta update
+ * @param bd BlockDevice instance
+ * @param buffer_size Size of the r/w buffer. Note that this will be alocated three times!
+ * @param source Source file on block device
+ * @param patch  Patch file on block device
+ * @param target Target file on block device
+ * @returns 0 if OK, a negative value if not OK
+ */
+int apply_delta_update(BlockDevice *bd, size_t buffer_size, BDFILE *source, BDFILE *patch, BDFILE *target) {
+    unsigned char *source_buffer = (unsigned char*)malloc(528);
+    if (!source_buffer) {
+        return MBED_DELTA_UPDATE_NO_MEMORY;
+    }
+    unsigned char *patch_buffer = (unsigned char*)malloc(528);
+    if (!patch_buffer) {
+        free(source_buffer);
+        return MBED_DELTA_UPDATE_NO_MEMORY;
+    }
+    unsigned char *target_buffer = (unsigned char*)malloc(528);
+    if (!target_buffer) {
+        free(source_buffer);
+        free(patch_buffer);
+        return MBED_DELTA_UPDATE_NO_MEMORY;
+    }
+
+    janpatch_ctx ctx = {
+        { source_buffer, buffer_size },
+        { patch_buffer,  buffer_size },
+        { target_buffer, buffer_size },
+
+        &bd_fread,
+        &bd_fwrite,
+        &bd_fseek,
+        &bd_ftell,
+
+        &patch_progress
+    };
+
+    /* Go... */
+    int j = janpatch(ctx, source, patch, target);
+
+    free(source_buffer);
+    free(patch_buffer);
+    free(target_buffer);
+
+    return j;
 }
 
 #endif // _MBED_DELTA_UPDATE_H

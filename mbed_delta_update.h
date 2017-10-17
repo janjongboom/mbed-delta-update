@@ -40,20 +40,21 @@ enum MBED_DELTA_UPDATE {
  * @returns 0 if OK, negative value if not OK
  */
 int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_address, size_t flash_size, BlockDevice *bd, size_t bd_address) {
+    int r;
+
+    FlashIAP flash;
+    if ((r = flash.init()) != 0) {
+        return r;
+    }
+
     char *page_buffer = (char*)malloc(flash_page_size);
     if (!page_buffer) {
         return MBED_DELTA_UPDATE_NO_MEMORY;
     }
 
-    int r;
-
-    FlashIAP flash;
-    if ((r = flash.init()) != 0) {
-        free(page_buffer);
-        return r;
-    }
-
     int bytes_left = (int)flash_size;
+
+    int prv_pct = 0;
 
     while (bytes_left > 0) {
         // copy it over
@@ -64,7 +65,12 @@ int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_addre
         }
         bd->program(page_buffer, bd_address, flash_page_size);
 
-        debug("Copying from flash to blockdevice: %d%%\n", ((flash_size - bytes_left) * 100) / flash_size);
+        int pct = ((flash_size - bytes_left) * 100) / flash_size;
+        if (pct != prv_pct) {
+            debug("Copying from flash to blockdevice: %d%%\n", ((flash_size - bytes_left) * 100) / flash_size);
+
+            prv_pct = pct;
+        }
 
         bytes_left -= flash_page_size;
         bd_address += flash_page_size;
@@ -133,16 +139,16 @@ void patch_progress(uint8_t pct) {
  * @returns 0 if OK, a negative value if not OK
  */
 int apply_delta_update(BlockDevice *bd, size_t buffer_size, BDFILE *source, BDFILE *patch, BDFILE *target) {
-    unsigned char *source_buffer = (unsigned char*)malloc(528);
+    unsigned char *source_buffer = (unsigned char*)malloc(buffer_size);
     if (!source_buffer) {
         return MBED_DELTA_UPDATE_NO_MEMORY;
     }
-    unsigned char *patch_buffer = (unsigned char*)malloc(528);
+    unsigned char *patch_buffer = (unsigned char*)malloc(buffer_size);
     if (!patch_buffer) {
         free(source_buffer);
         return MBED_DELTA_UPDATE_NO_MEMORY;
     }
-    unsigned char *target_buffer = (unsigned char*)malloc(528);
+    unsigned char *target_buffer = (unsigned char*)malloc(buffer_size);
     if (!target_buffer) {
         free(source_buffer);
         free(patch_buffer);

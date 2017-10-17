@@ -57,13 +57,16 @@ int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_addre
     int prv_pct = 0;
 
     while (bytes_left > 0) {
+        int to_read = flash_page_size;
+        if (to_read > bytes_left) to_read = bytes_left;
+
         // copy it over
-        int v = flash.read(page_buffer, flash_address, flash_page_size);
+        int v = flash.read(page_buffer, flash_address, to_read);
         if (v != 0) {
             free(page_buffer);
             return r;
         }
-        bd->program(page_buffer, bd_address, flash_page_size);
+        bd->program(page_buffer, bd_address, to_read);
 
         int pct = ((flash_size - bytes_left) * 100) / flash_size;
         if (pct != prv_pct) {
@@ -72,9 +75,9 @@ int copy_flash_to_blockdevice(const uint32_t flash_page_size, size_t flash_addre
             prv_pct = pct;
         }
 
-        bytes_left -= flash_page_size;
-        bd_address += flash_page_size;
-        flash_address += flash_page_size;
+        bytes_left -= to_read;
+        bd_address += to_read;
+        flash_address += to_read;
     }
 
     free(page_buffer);

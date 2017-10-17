@@ -128,8 +128,13 @@ int print_blockdevice_content(BlockDevice *bd, size_t address, size_t length, si
     return MBED_DELTA_UPDATE_OK;
 }
 
-void patch_progress(uint8_t pct) {
-    debug("Patch progress: %d%%\n", pct);
+static void patch_progress(uint8_t pct) {
+    static uint8_t last_patch_pct = 0;
+
+    if (last_patch_pct != pct) {
+        debug("Patch progress: %d%%\n", pct);
+        last_patch_pct = pct;
+    }
 }
 
 /**
